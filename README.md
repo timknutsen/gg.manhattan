@@ -2,6 +2,10 @@
 
 A ggplot2-based function for creating publication-quality Manhattan plots from GWAS (Genome-Wide Association Study) data.
 
+## Example Output
+
+![Manhattan Plot Example](Rplot.png)
+
 ## Files
 
 - **gg.manhattan.R** - Main plotting function

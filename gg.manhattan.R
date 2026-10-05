@@ -107,7 +107,11 @@ gg.manhattan <- function(x, chr="CHR", bp="BP", p="P", snp="SNP", trait = "trait
   if (facet_by_trait && !is.null(d$TRAIT) && length(unique(d$TRAIT)) >= 2) {
     plot=ggplot(d, aes(x = pos, y = logp))
     plot=plot + geom_point(aes(colour=factor(CHR))) + ylab(expression(-log[10](italic(p))))
-    plot=plot+scale_x_continuous(name=xlabel, breaks=ticks, labels=labs)
+    if (nchr==1) {
+      plot=plot+scale_x_continuous(name=xlabel)
+    } else {
+      plot=plot+scale_x_continuous(name=xlabel, breaks=ticks, labels=labs)
+    }
     if (logp) plot=plot+scale_y_continuous(breaks=seq(2,ymax,2), labels=seq(2,ymax,2),
                                            limits = c(ymin-0.5, ymax), expand=c(0,0))
     plot=plot+scale_colour_manual(values=mycols)

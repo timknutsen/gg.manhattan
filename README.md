@@ -52,3 +52,14 @@ Optional:
 - `logp` - Use -log10(p) transformation (default: TRUE)
 
 See function documentation for additional options.
+
+## Regression Checks
+
+With ggplot2 installed, run from the repository root:
+
+```sh
+Rscript tests/regression.R
+```
+
+The checks cover single-chromosome facet axes, shared SNP coordinates across
+traits, small simulated datasets, and single-trait and multi-trait plotting.

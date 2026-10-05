@@ -15,25 +15,22 @@ simulate_gwas_data <- function(n_snps = 40000, n_traits = 3, n_chromosomes = 22)
   for (chr in 1:n_chromosomes) {
     # Number of SNPs per chromosome (roughly proportional to chromosome size)
     snps_per_chr <- round(n_snps / n_chromosomes)
-    
-    for (trait in 1:n_traits) {
-      # Generate base pair positions (realistic range per chromosome)
-      bp_positions <- sort(sample(1:250000000, snps_per_chr, replace = FALSE))
+    # Each SNP has the same genomic position across traits.
+    bp_positions <- sort(sample(1:250000000, snps_per_chr, replace = FALSE))
+    snp_ids <- paste0("rs", chr, "_", seq_along(bp_positions))
       
+    for (trait in 1:n_traits) {
       # Generate p-values with some realistic structure
       # Most SNPs have non-significant p-values
       # A few have strong signals (smaller p-values)
       p_values <- runif(snps_per_chr, min = 0.001, max = 1)
       
       # Add some "hits" (significant SNPs) - typically 2-5 per chromosome per trait with more SNPs
-      n_hits <- sample(1:5, 1)
+      n_hits <- sample.int(min(5L, snps_per_chr), 1L)
       if (n_hits > 0) {
-        hit_indices <- sample(1:snps_per_chr, n_hits, replace = FALSE)
+        hit_indices <- sample.int(snps_per_chr, n_hits, replace = FALSE)
         p_values[hit_indices] <- runif(n_hits, min = 1e-8, max = 1e-4)
       }
-      
-      # Create SNP identifiers
-      snp_ids <- paste0("rs", chr, "_", seq_along(bp_positions))
       
       # Combine into dataframe
       trait_data <- data.frame(

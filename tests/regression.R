@@ -198,5 +198,69 @@ check("thresholds remain inside the y-axis without dropping points or lines", fu
             length(Filter(function(layer) !is.null(layer$yintercept), built$data)) == 2L)
 })
 
+check("regional signals contain neighboring significant SNPs and shared centres", function() {
+  set.seed(42)
+  data <- simulate_gwas_data()
+  peaks <- attr(data, "peaks")
+  stopifnot(nrow(peaks) == 9L, all(table(peaks$trait) == 3L))
+  shared <- vapply(split(peaks$SNP, peaks$trait), function(x) x[1L], character(1))
+  stopifnot(length(unique(shared)) == 1L)
+  for (i in seq_len(nrow(peaks))) {
+    peak <- peaks[i, ]
+    region <- subset(data, trait == peak$trait & CHR == peak$CHR &
+                       abs(BP - peak$BP) <= peak$width)
+    stopifnot(sum(region$P <= 5e-8) >= 5L,
+              peak$SNP %in% region$SNP,
+              all(data$BP[data$SNP == peak$SNP] == peak$BP))
+  }
+})
+
+check("background p-values are calibrated and locally correlated", function() {
+  set.seed(123)
+  data <- simulate_gwas_data(n_traits = 1, n_peaks = 0)
+  stopifnot(nrow(attr(data, "peaks")) == 0L,
+            abs(mean(data$P) - 0.5) < 0.03,
+            abs(mean(data$P < 0.05) - 0.05) < 0.015)
+  neighbors <- which(diff(data$CHR) == 0)
+  association <- -log10(data$P)
+  stopifnot(cor(association[neighbors], association[neighbors + 1L]) > 0.2)
+})
+
+check("peak count, width, and effect control signal behavior", function() {
+  set.seed(42)
+  one <- simulate_gwas_data(100, 2, 2, n_peaks = 1)
+  stopifnot(nrow(attr(one, "peaks")) == 2L)
+  tiny <- simulate_gwas_data(1, 2, n_peaks = 10)
+  stopifnot(nrow(tiny) == 2L, nrow(attr(tiny, "peaks")) == 2L,
+            all(is.finite(tiny$P) & tiny$P > 0 & tiny$P <= 1))
+  set.seed(42)
+  narrow <- simulate_gwas_data(20000, 1, peak_width = 1e6)
+  set.seed(42)
+  broad <- simulate_gwas_data(20000, 1, peak_width = 6e6)
+  set.seed(42)
+  weak <- simulate_gwas_data(20000, 1, peak_effect = 4)
+  set.seed(42)
+  strong <- simulate_gwas_data(20000, 1, peak_effect = 8)
+  stopifnot(sum(broad$P <= 5e-8) > sum(narrow$P <= 5e-8),
+            sum(strong$P <= 5e-8) > sum(weak$P <= 5e-8))
+})
+
+check("invalid peak settings fail clearly and extreme effects stay finite", function() {
+  for (arg in c("n_peaks", "peak_width", "peak_effect")) {
+    values <- if (arg == "n_peaks") list(-1, 1.5, NA, Inf, c(1, 2)) else
+      list(0, -1, NA, Inf, c(1, 2))
+    for (value in values) {
+      args <- list(n_snps = 10, n_traits = 1)
+      args[[arg]] <- value
+      message <- tryCatch({do.call(simulate_gwas_data, args); ""},
+                          error = function(e) conditionMessage(e))
+      stopifnot(grepl(paste(arg, "must be"), message, fixed = TRUE))
+    }
+  }
+  strong <- simulate_gwas_data(100, 1, 1, peak_effect = 100)
+  stopifnot(all(is.finite(strong$P) & strong$P > 0 & strong$P <= 1),
+            all(is.finite(-log10(strong$P))))
+})
+
 if (length(failures)) stop(paste(length(failures), "regression checks failed"))
 cat("All regression checks passed.\n")

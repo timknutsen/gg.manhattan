@@ -154,7 +154,8 @@ ggplot2 layers, or saved with `ggsave()`.
 
 ## Simulated data
 
-`simulate_gwas_data(n_snps = 40000, n_traits = 3, n_chromosomes = 22)`
+`simulate_gwas_data(n_snps = 40000, n_traits = 3, n_chromosomes = 22,
+n_peaks = 3, peak_width = 3e6, peak_effect = 7)`
 returns columns `CHR`, `BP`, `P`, `SNP`, and `trait`.
 
 - All three counts must be single positive whole numbers.
@@ -167,9 +168,36 @@ returns columns `CHR`, `BP`, `P`, `SNP`, and `trait`.
 - Each locus keeps the same SNP ID, chromosome, and position across traits.
   Positions are sampled without replacement from 1 to 250,000,000 bp within
   each chromosome.
-- P-values vary between traits. Each occupied chromosome and trait receives
-  between 1 and 5 signal p-values, capped by the available SNP count.
+- P-values are derived from two-sided standard-normal tests, with correlated
+  background statistics for nearby SNPs. Away from peaks, the marginal null
+  p-values are uniform rather than truncated.
+- By default each trait has three regional signals. Effects taper with distance
+  from each centre, producing groups of associated neighboring SNPs. One centre
+  is shared across traits; the other centres and effect strengths vary. Centres
+  use different chromosomes when possible, otherwise they prefer separated loci.
 - Call `set.seed()` before generating data to reproduce an example.
+
+| Simulator argument | Default | Meaning |
+| --- | --- | --- |
+| `n_snps` | `40000` | Exact number of distinct loci per trait. |
+| `n_traits` | `3` | Number of traits. |
+| `n_chromosomes` | `22` | Number of chromosomes over which loci are distributed. |
+| `n_peaks` | `3` | Regional signal centres per trait, capped at the available SNP count; `0` generates background only. |
+| `peak_width` | `3e6` | Gaussian effect-profile standard deviation in base pairs; larger values produce broader peaks. |
+| `peak_effect` | `7` | Approximate absolute effect on the standard-normal statistic at a peak centre, varied by 10% between peaks; larger values tend to give stronger associations. |
+
+The count arguments must be whole numbers; `n_peaks` may be zero, and the other
+counts must be positive. Width and effect must be finite positive numbers.
+Background correlation decays exponentially with physical distance, with a
+decay length of `peak_width / 6`. Changing width therefore changes both the
+signal footprint and local noise correlation. The actual peak height varies
+with the simulated noise and marker density; sparse datasets may not contain
+enough neighboring markers to show a smooth regional peak.
+
+`attr(gwas_data, "peaks")` records each simulated centre's trait, chromosome,
+position, SNP ID, signed effect, and width. It describes the injected signals,
+not detected lead SNPs. The example image is generated directly by this
+simulator without adding separate artificial p-value peaks in the plotting code.
 
 ```r
 set.seed(42)
@@ -186,8 +214,9 @@ regional_data <- subset(gwas_data, CHR == 1)
 print(gg.manhattan(regional_data, facet_by_trait = TRUE))
 ```
 
-These data illustrate plotting behaviour. They do not model linkage
-disequilibrium, genetic architecture, or correlations between traits.
+These are illustrative summary statistics with LD-like local correlation,
+not a genotype-based GWAS or a calibrated model of linkage disequilibrium,
+population structure, heritability, or genetic correlations between traits.
 
 ## Regression checks
 
@@ -200,6 +229,8 @@ independent trait p-values, small and nondivisible SNP counts, invalid arguments
 source-time behaviour, threshold coordinates, and default-size plots. Style
 checks also cover exact-threshold highlights, custom and disabled highlights,
 raw-value plots, nonconsecutive chromosome labels, and visible threshold lines.
+Simulation checks cover regional signal clusters, null p-value calibration,
+peak controls, and shared centre metadata.
 
 ## Files
 

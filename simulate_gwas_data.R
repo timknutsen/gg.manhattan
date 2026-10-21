@@ -1,34 +1,41 @@
-# Install ggplot2 if not already installed
-if (!require(ggplot2)) install.packages("ggplot2")
-
-# Set seed for reproducibility
-set.seed(42)
-
-source("gg.manhattan.R")
-
-# Function to simulate GWAS-like data
+# Simulate exactly n_snps distinct loci, repeated once per trait.
+# Counts must be positive whole numbers. Set the seed before calling for
+# reproducible results. Positions are shared across traits; p-values vary.
 simulate_gwas_data <- function(n_snps = 40000, n_traits = 3, n_chromosomes = 22) {
+  check_count <- function(value, name) {
+    if (!(length(value) == 1L && is.numeric(value) && !is.complex(value) &&
+          is.finite(value) && value >= 1 && value == floor(value) &&
+          value <= .Machine$integer.max)) {
+      stop(paste(name, "must be a single positive whole number no larger than",
+                 .Machine$integer.max), call. = FALSE)
+    }
+  }
+  check_count(n_snps, "n_snps")
+  check_count(n_traits, "n_traits")
+  check_count(n_chromosomes, "n_chromosomes")
   
   data <- data.frame()
+  snps_per_chr <- n_snps %/% n_chromosomes
+  remainder <- n_snps %% n_chromosomes
   
-  # Create SNPs distributed across chromosomes
-  for (chr in 1:n_chromosomes) {
-    # Number of SNPs per chromosome (roughly proportional to chromosome size)
-    snps_per_chr <- round(n_snps / n_chromosomes)
+  # Distribute the remainder over the first chromosomes to preserve the total.
+  for (chr in seq_len(n_chromosomes)) {
+    n_chr_snps <- snps_per_chr + as.integer(chr <= remainder)
+    if (n_chr_snps == 0L) next
     # Each SNP has the same genomic position across traits.
-    bp_positions <- sort(sample(1:250000000, snps_per_chr, replace = FALSE))
+    bp_positions <- sort(sample.int(250000000, n_chr_snps, replace = FALSE))
     snp_ids <- paste0("rs", chr, "_", seq_along(bp_positions))
-      
-    for (trait in 1:n_traits) {
+
+    for (trait in seq_len(n_traits)) {
       # Generate p-values with some realistic structure
       # Most SNPs have non-significant p-values
       # A few have strong signals (smaller p-values)
-      p_values <- runif(snps_per_chr, min = 0.001, max = 1)
+      p_values <- runif(n_chr_snps, min = 0.001, max = 1)
       
-      # Add some "hits" (significant SNPs) - typically 2-5 per chromosome per trait with more SNPs
-      n_hits <- sample.int(min(5L, snps_per_chr), 1L)
+      # Add 1-5 hits per chromosome and trait, bounded by the SNP count.
+      n_hits <- sample.int(min(5L, n_chr_snps), 1L)
       if (n_hits > 0) {
-        hit_indices <- sample.int(snps_per_chr, n_hits, replace = FALSE)
+        hit_indices <- sample.int(n_chr_snps, n_hits, replace = FALSE)
         p_values[hit_indices] <- runif(n_hits, min = 1e-8, max = 1e-4)
       }
       
@@ -48,22 +55,26 @@ simulate_gwas_data <- function(n_snps = 40000, n_traits = 3, n_chromosomes = 22)
   return(data)
 }
 
-# Generate example data for 3 traits with 40k SNPs
-gwas_data <- simulate_gwas_data(n_snps = 40000, n_traits = 3, n_chromosomes = 22)
+# Run examples only with Rscript, so source() just loads the function.
+if (sys.nframe() == 0L) {
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    stop("Install ggplot2 before running the examples: install.packages('ggplot2')",
+         call. = FALSE)
+  }
+  source("gg.manhattan.R")
+  set.seed(42)
+  gwas_data <- simulate_gwas_data()
 
-# View the structure
-head(gwas_data, 10)
-str(gwas_data)
+  print(head(gwas_data, 10))
+  str(gwas_data)
+  cat("Distinct SNPs:", length(unique(gwas_data$SNP)), "\n")
+  cat("Rows across traits:", nrow(gwas_data), "\n")
+  cat("Number of traits:", length(unique(gwas_data$trait)), "\n")
+  cat("Number of chromosomes:", length(unique(gwas_data$CHR)), "\n")
+  cat("P-value range:", range(gwas_data$P), "\n")
 
-# Summary statistics
-print(paste("Total SNPs:", nrow(gwas_data)))
-print(paste("Number of traits:", length(unique(gwas_data$trait))))
-print(paste("Number of chromosomes:", length(unique(gwas_data$CHR))))
-print(paste("P-value range:", min(gwas_data$P), "to", max(gwas_data$P)))
-
-# Example: Plot a single trait
-single_trait <- subset(gwas_data, trait == "Trait_1")
-gg.manhattan(single_trait, plot_title = "Manhattan Plot - Trait 1")
-
-# Example: Plot all traits together with faceting
-gg.manhattan(gwas_data, plot_title = "Manhattan Plot - Multiple Traits", facet_by_trait = TRUE)
+  single_trait <- subset(gwas_data, trait == "Trait_1")
+  print(gg.manhattan(single_trait, plot_title = "Manhattan Plot - Trait 1"))
+  print(gg.manhattan(gwas_data, plot_title = "Manhattan Plot - Multiple Traits",
+                    facet_by_trait = TRUE))
+}

@@ -1,7 +1,8 @@
 gg.manhattan <- function(x, chr="CHR", bp="BP", p="P", snp="SNP", trait = "trait",
-                         cols=c("gray10", "gray60"), plot_title=NULL, chrlabs=NULL,
+                         cols=c("#294F79", "#278D91"), plot_title=NULL, chrlabs=NULL,
                          suggestiveline=-log10(1e-5), genomewideline=-log10(5e-8),
-                         logp=TRUE, facet_by_trait=FALSE) {
+                         logp=TRUE, facet_by_trait=FALSE, highlight=TRUE,
+                         highlight_colour="#C77B16", point_size=0.6, point_alpha=0.75) {
   
   # Require ggplot2, install if not present in labrary.
   if (!require(ggplot2)) install.packages("ggplot2")
@@ -81,7 +82,7 @@ gg.manhattan <- function(x, chr="CHR", bp="BP", p="P", snp="SNP", trait = "trait
       # Old way: assumes SNPs evenly distributed
       # ticks=c(ticks, d[d$index==i, ]$pos[floor(length(d[d$index==i, ]$pos)/2)+1])
       # New way: doesn't make that assumption
-      ticks = c(ticks, (min(d[d$CHR == i,]$pos) + max(d[d$CHR == i,]$pos))/2 + 1)
+      ticks = c(ticks, (min(d[d$index == i,]$pos) + max(d[d$index == i,]$pos))/2)
     }
     xlabel = 'Chromosome'
     ## Set x labels to Chromsomes, or provided custom list from chrlabs argument.
@@ -92,57 +93,84 @@ gg.manhattan <- function(x, chr="CHR", bp="BP", p="P", snp="SNP", trait = "trait
     }
   }
   
-  # Initialize plot
-  xmax = ceiling(max(d$pos) * 1.03)
-  xmin = floor(max(d$pos) * -0.03)
-  ymin = floor(min(d$logp))
-  ymax = ceiling(max(d$logp))
-  # Set ymax to even number.
-  if ((ymax %% 2) != 0 ) {
-    ymax = ymax + 1
+  # Build a common plot so regional, faceted, and genome-wide views share a style.
+  overlay_traits <- nchr == 1 && !facet_by_trait &&
+    !is.null(d$TRAIT) && length(unique(d$TRAIT)) >= 2
+  colour_mapping <- if (overlay_traits) aes(colour = factor(TRAIT)) else aes(colour = factor(CHR))
+  palette <- if (overlay_traits) {
+    grDevices::colorRampPalette(cols)(length(unique(d$TRAIT)))
+  } else rep(cols, length.out = nchr)
+  plot <- ggplot(d, aes(x = pos, y = logp)) +
+    geom_point(colour_mapping, size = point_size, alpha = point_alpha, stroke = 0) +
+    scale_colour_manual(values = palette, guide = "none") +
+    labs(x = xlabel, y = if (logp) expression(-log[10](italic(p))) else p,
+         title = plot_title)
+
+  if (nchr == 1) {
+    plot <- plot + scale_x_continuous(name = xlabel,
+                                      expand = expansion(mult = c(0.008, 0.008)))
+  } else {
+    plot <- plot + scale_x_continuous(name = xlabel, breaks = ticks, labels = labs,
+                                      expand = expansion(mult = c(0.008, 0.008)))
   }
-  mycols = rep(cols, nchr/2+1)
-  
-  # CREATE FACETED PLOT IF REQUESTED
+
+  # Include the threshold lines in the limits even when no points reach them.
+  thresholds <- numeric()
+  if (suggestiveline) thresholds <- c(thresholds, suggestiveline)
+  if (genomewideline) thresholds <- c(thresholds, genomewideline)
+  if (logp) {
+    ymax <- max(2, ceiling(max(c(d$logp, thresholds)) / 2) * 2)
+    plot <- plot + scale_y_continuous(
+      breaks = seq(0, ymax, 2), limits = c(0, ymax),
+      expand = expansion(mult = c(0, 0.025)))
+  }
+
+  if (suggestiveline) {
+    plot <- plot + geom_hline(yintercept = suggestiveline, colour = "#617887",
+                              linewidth = 0.35, linetype = "dotted")
+  }
+  if (genomewideline) {
+    plot <- plot + geom_hline(yintercept = genomewideline, colour = "#617887",
+                              linewidth = 0.45, linetype = "dashed")
+  }
+  # Reuse the selected genome-wide threshold. Raw-value plots are not
+  # automatically interpreted as p-values, so they do not receive highlights.
+  if (highlight && logp && genomewideline) {
+    hits <- d[d$logp >= genomewideline, , drop = FALSE]
+    if (nrow(hits)) {
+      plot <- plot + geom_point(data = hits, colour = highlight_colour,
+                                size = point_size * 1.5, alpha = 1, stroke = 0)
+    }
+  }
+
   if (facet_by_trait && !is.null(d$TRAIT) && length(unique(d$TRAIT)) >= 2) {
-    plot=ggplot(d, aes(x = pos, y = logp))
-    plot=plot + geom_point(aes(colour=factor(CHR))) + ylab(expression(-log[10](italic(p))))
-    if (nchr==1) {
-      plot=plot+scale_x_continuous(name=xlabel)
-    } else {
-      plot=plot+scale_x_continuous(name=xlabel, breaks=ticks, labels=labs)
-    }
-    if (logp) plot=plot+scale_y_continuous(breaks=seq(2,ymax,2), labels=seq(2,ymax,2),
-                                           limits = c(ymin-0.5, ymax), expand=c(0,0))
-    plot=plot+scale_colour_manual(values=mycols)
-    plot=plot + facet_wrap(~TRAIT, ncol=1)
-  } else if (nchr==1) {
-    plot <- ggplot(data = d, aes(pos,logp),ylab=expression(-log[10](italic(p))),
-                   xlab=xlabel) + geom_point()
-    if (!is.null(d$TRAIT) && length(unique(d$TRAIT)) >= 2) {
-      plot <- plot + geom_point(aes(colour = TRAIT))
-    }
-    plot <- plot +	scale_y_continuous(breaks=seq(2,ymax,2), labels=seq(2,ymax,2),
-                                      limits = c(ymin-0.5, ymax), expand = c(0,0))
-  }   else {
-    plot=ggplot(d, aes(x = pos,y = logp))
-    plot=plot + geom_point(aes(colour=factor(CHR))) + ylab(expression(-log[10](italic(p))))
-    plot=plot+scale_x_continuous(name=xlabel, breaks=ticks, labels=labs)
-    if (logp) plot=plot+scale_y_continuous(breaks=seq(2,ymax,2), labels=seq(2,ymax,2),
-                                           limits = c(ymin-0.5, ymax), expand=c(0,0)) # expand ensures pretty y-axis
-    plot=plot+scale_colour_manual(values=mycols)
+    plot <- plot + facet_wrap(~TRAIT, ncol = 1)
   }
-  
-  #if (annotate)   plot=plot + geom_point(data=d.annotate, colour=I("green3"))
-  if (!is.null(plot_title)) plot=plot + ggtitle(plot_title)
-  plot=plot + theme(
-    panel.background=element_blank(),
-    panel.grid.minor=element_blank(),
-    axis.line=element_line(),
-    axis.line.x=element_blank(),
-    legend.position = "none"
-  )
-  if (suggestiveline) plot=plot+geom_hline(yintercept=suggestiveline,colour="blue", alpha=I(1/3))
-  if (genomewideline) plot=plot+geom_hline(yintercept=genomewideline,colour="red")
-  plot
+
+  plot + theme_minimal(base_size = 12, base_family = "sans") +
+    theme(
+      plot.background = element_rect(fill = "white", colour = NA),
+      panel.background = element_rect(fill = "white", colour = NA),
+      text = element_text(colour = "#123348"),
+      axis.text = element_text(colour = "#526B79", size = 10),
+      axis.title = element_text(colour = "#123348", size = 12),
+      axis.title.x = element_text(margin = margin(t = 10)),
+      axis.title.y = element_text(margin = margin(r = 10)),
+      axis.line.x = element_line(colour = "#E4EBEE", linewidth = 0.35),
+      axis.ticks.x = element_line(colour = "#E4EBEE", linewidth = 0.35),
+      panel.grid.major.y = element_line(colour = "#E4EBEE", linewidth = 0.3),
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.spacing.y = grid::unit(10, "pt"),
+      strip.background = element_rect(fill = "#EDF4F6", colour = NA),
+      strip.text = element_text(colour = "#123348", face = "bold", hjust = 0,
+                                size = 11, margin = margin(5, 8, 5, 8)),
+      plot.title = element_text(size = 20, face = "bold", margin = margin(b = 12)),
+      plot.subtitle = element_text(colour = "#526B79", margin = margin(b = 12)),
+      plot.caption = element_text(colour = "#526B79", hjust = 0, size = 9, lineheight = 1.4,
+                                   margin = margin(t = 12)),
+      plot.title.position = "plot", plot.caption.position = "plot",
+      plot.margin = margin(16, 20, 12, 14),
+      legend.position = "none"
+    )
 }

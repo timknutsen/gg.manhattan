@@ -139,5 +139,64 @@ check("threshold arguments use plotted y-coordinates", function() {
             length(intercepts(off)) == 0L)
 })
 
+check("gold highlights follow the selected threshold in every plot layout", function() {
+  input <- regional_data
+  input$P <- c(1e-3, 5e-8, 1e-10, 1e-7)
+  for (multi_chr in c(FALSE, TRUE)) {
+    if (multi_chr) input$CHR <- rep(c(3, 11), 2)
+    for (facets in c(FALSE, TRUE)) {
+      plot <- gg.manhattan(input, facet_by_trait = facets)
+      gold <- Filter(function(layer) identical(layer$aes_params$colour, "#C77B16"), plot$layers)
+      stopifnot(length(gold) == 1L, nrow(gold[[1]]$data) == 2L,
+                all(gold[[1]]$data$logp >= -log10(5e-8)),
+                nrow(ggplot_build(plot)$data[[1]]) == nrow(input))
+    }
+  }
+  custom <- gg.manhattan(input, genomewideline = 6, highlight_colour = "purple")
+  purple <- Filter(function(layer) identical(layer$aes_params$colour, "purple"), custom$layers)
+  stopifnot(length(purple) == 1L, nrow(purple[[1]]$data) == 3L)
+})
+
+check("highlighting can be disabled and is absent for raw-value plots", function() {
+  input <- regional_data
+  input$P <- c(1e-3, 1e-8, 1e-10, 1e-7)
+  for (args in list(list(highlight = FALSE), list(genomewideline = FALSE),
+                    list(logp = FALSE))) {
+    plot <- do.call(gg.manhattan, c(list(x = input), args))
+    stopifnot(!any(vapply(plot$layers, function(layer)
+      identical(layer$aes_params$colour, "#C77B16"), logical(1))))
+  }
+  no_hits <- gg.manhattan(regional_data)
+  stopifnot(!any(vapply(no_hits$layers, function(layer)
+    identical(layer$aes_params$colour, "#C77B16"), logical(1))))
+})
+
+check("Ocean palette and custom colours retain positions on nonconsecutive chromosomes", function() {
+  input <- regional_data
+  input$CHR <- rep(c(3, 11), 2)
+  ocean <- ggplot_build(gg.manhattan(input, facet_by_trait = TRUE))
+  custom <- ggplot_build(gg.manhattan(input, cols = c("black", "grey60")))
+  stopifnot(setequal(ocean$data[[1]]$colour, c("#294F79", "#278D91")),
+            setequal(custom$data[[1]]$colour, c("black", "grey60")),
+            all(is.finite(ocean$layout$panel_params[[1]]$x$get_breaks())),
+            identical(ocean$data[[1]]$x, custom$data[[1]]$x))
+  raw <- ggplot_build(gg.manhattan(input, logp = FALSE))
+  stopifnot(identical(sort(raw$data[[1]]$y), sort(input$P)))
+  regional <- ggplot_build(gg.manhattan(regional_data))
+  stopifnot(length(unique(regional$data[[1]]$colour)) == 2L)
+})
+
+check("thresholds remain inside the y-axis without dropping points or lines", function() {
+  input <- regional_data
+  input$P <- rep(0.5, nrow(input))
+  plot <- gg.manhattan(input, facet_by_trait = TRUE)
+  built <- withCallingHandlers(ggplot_build(plot), warning = function(w) stop(w))
+  for (panel in built$layout$panel_params) {
+    stopifnot(max(panel$y.range) >= -log10(5e-8))
+  }
+  stopifnot(all(is.finite(built$data[[1]]$y)),
+            length(Filter(function(layer) !is.null(layer$yintercept), built$data)) == 2L)
+})
+
 if (length(failures)) stop(paste(length(failures), "regression checks failed"))
 cat("All regression checks passed.\n")

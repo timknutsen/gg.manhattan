@@ -5,6 +5,10 @@ The repository also includes a reproducible example-data generator.
 
 ![Example Manhattan plot](Rplot.png)
 
+The default Ocean style uses alternating blue and teal chromosomes, pale trait
+headers, subtle horizontal gridlines, and gold points at or above the selected
+genome-wide significance threshold. The image uses simulated data.
+
 ## Setup
 
 Run the examples and tests from the repository root. Install ggplot2 once:
@@ -88,9 +92,43 @@ The defaults are `suggestiveline = 5` and
 `genomewideline = -log10(5e-8)` (approximately 7.30103).
 Pass `FALSE` to either argument to hide that line.
 
+The suggestive line is dotted and the genome-wide line is dashed. Gold
+highlights follow `genomewideline`: by default they mark `P <= 5e-8`, including
+points exactly on the threshold. Set `highlight = FALSE` to turn off the gold
+overlay, or set `highlight_colour` to choose another colour. Hiding the
+genome-wide line also disables the automatic highlights. In log-p plots the
+y-axis includes enabled thresholds even if all observations fall below them.
+
 With `logp = FALSE`, `P` is plotted directly and thresholds still use
 y-coordinates. For a score plot, disable the p-value threshold lines and set an
 appropriate y-axis label with `+ labs(y = "Score")`.
+Automatic significance highlights are disabled when `logp = FALSE`.
+
+## Ocean styling
+
+```r
+ocean_plot <- gg.manhattan(
+  gwas_data,
+  facet_by_trait = TRUE,
+  highlight = TRUE,
+  highlight_colour = "#C77B16",
+  point_size = 0.6,
+  point_alpha = 0.75
+)
+print(ocean_plot)
+```
+
+Use `cols` to change chromosome colours. For an un-faceted regional plot with
+multiple traits, the points instead use trait colours drawn from that palette.
+The highlight overlay uses slightly larger opaque points so significant
+associations remain visible in dense plots. You can extend the returned ggplot
+with `labs()` or `theme()` as usual.
+
+To reproduce the README figure from simulated data:
+
+```sh
+Rscript examples/ocean.R
+```
 
 ## Plotting arguments
 
@@ -99,13 +137,17 @@ appropriate y-axis label with `+ labs(y = "Score")`.
 | `x` | Required | Input data frame. |
 | `chr`, `bp`, `p` | `"CHR"`, `"BP"`, `"P"` | Columns containing chromosomes, positions, and p-values. |
 | `snp`, `trait` | `"SNP"`, `"trait"` | Optional SNP and trait columns. |
-| `cols` | `c("gray10", "gray60")` | Alternating chromosome colours. |
+| `cols` | `c("#294F79", "#278D91")` | Alternating Ocean blue and teal chromosome colours. |
 | `plot_title` | `NULL` | Optional plot title. |
 | `chrlabs` | `NULL` | Labels for multi-chromosome plots, in sorted chromosome order; provide one per chromosome. |
 | `suggestiveline` | `-log10(1e-5)` | Suggestive threshold at y = 5; `FALSE` hides it. |
 | `genomewideline` | `-log10(5e-8)` | Genome-wide threshold at y approximately 7.30103; `FALSE` hides it. |
 | `logp` | `TRUE` | Transform `P` to `-log10(P)`; `FALSE` plots the input values directly. |
 | `facet_by_trait` | `FALSE` | Stack panels by trait when two or more traits are present. |
+| `highlight` | `TRUE` | Highlight points at or above `genomewideline` in log-p plots. |
+| `highlight_colour` | `"#C77B16"` | Gold colour for significant points. |
+| `point_size` | `0.6` | Base point size; highlighted points are 1.5 times this size. |
+| `point_alpha` | `0.75` | Base point opacity; highlighted points remain opaque. |
 
 The return value is a ggplot object, so it can be printed, extended with
 ggplot2 layers, or saved with `ggsave()`.
@@ -155,7 +197,9 @@ Rscript tests/regression.R
 
 The checks cover regional facet axes, chromosome labels, shared SNP coordinates,
 independent trait p-values, small and nondivisible SNP counts, invalid arguments,
-source-time behaviour, threshold coordinates, and default-size plots.
+source-time behaviour, threshold coordinates, and default-size plots. Style
+checks also cover exact-threshold highlights, custom and disabled highlights,
+raw-value plots, nonconsecutive chromosome labels, and visible threshold lines.
 
 ## Files
 
@@ -164,5 +208,6 @@ source-time behaviour, threshold coordinates, and default-size plots.
 | `gg.manhattan.R` | Plotting function. |
 | `simulate_gwas_data.R` | Simulator and examples run with Rscript. |
 | `tests/regression.R` | Standalone regression checks. |
+| `examples/ocean.R` | Reproducible Ocean figure using synthetic association peaks. |
 | `Rplot.png` | Example output. |
 | `LICENSE.md` | GPL-3.0 licence. |
